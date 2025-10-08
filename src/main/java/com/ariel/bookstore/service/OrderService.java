@@ -13,7 +13,8 @@ public interface OrderService {
 
     OrderResponse create(OrderCreateRequest request);
     OrderResponse getById(UUID id);
-    Page<OrderResponse> list(Pageable pageable);
+    Page<OrderResponse> list(Pageable pageable, UUID customerId, String status);
+
     OrderResponse markPaid(UUID id);
     OrderResponse cancel(UUID id);
 

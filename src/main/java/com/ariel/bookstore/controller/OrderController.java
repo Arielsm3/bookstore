@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,7 +37,18 @@ public class OrderController {
     }
 
     @GetMapping
-    public Page<OrderResponse> list(Pageable pageable) {
-        return service.list(pageable);
+    public Page<OrderResponse> list(
+            @PageableDefault(sort = "createdAt") Pageable pageable,
+            @RequestParam(required = false) UUID customerId,
+            @RequestParam(required = false) String status
+    ) {
+        return service.list(pageable, customerId, status);
+    }
+
+    //@DeleteMapping("/{id}")
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<Void> cancel(@PathVariable UUID id) {
+        service.cancel(id);
+        return ResponseEntity.noContent().build();
     }
 }

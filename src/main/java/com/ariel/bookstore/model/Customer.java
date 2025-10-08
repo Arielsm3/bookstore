@@ -30,4 +30,7 @@ public class Customer {
     @Column(nullable = false, unique = true, length = 120)
     private String email;
 
+    @Column(length = 40)
+    private String phone;
+
 }

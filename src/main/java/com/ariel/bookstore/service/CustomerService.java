@@ -1,6 +1,8 @@
 package com.ariel.bookstore.service;
 
-import com.ariel.bookstore.model.Customer;
+import com.ariel.bookstore.dto.CustomerCreateRequest;
+import com.ariel.bookstore.dto.CustomerResponse;
+import com.ariel.bookstore.dto.CustomerUpdateRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -8,12 +10,12 @@ import java.util.UUID;
 
 public interface CustomerService {
 
-    Customer create(Customer customer);
-    Customer getById(UUID id);
-    Customer getByEmail(String email);
-    Page<Customer> list(Pageable pageable);
-    Page<Customer> searchByName(String name, Pageable pageable);
-    Customer update(UUID id, Customer changes);
+    CustomerResponse create(CustomerCreateRequest request);
+    CustomerResponse getById(UUID id);
+    Page<CustomerResponse> list(Pageable pageable, String name);
+    Page<CustomerResponse> searchByName(String name, Pageable pageable);
+    CustomerResponse update(UUID id, CustomerUpdateRequest request);
+
     void delete(UUID id);
     void deleteAll();
 }

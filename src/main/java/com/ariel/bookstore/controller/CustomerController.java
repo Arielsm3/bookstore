@@ -1,13 +1,17 @@
 package com.ariel.bookstore.controller;
 
+import com.ariel.bookstore.dto.CustomerCreateRequest;
+import com.ariel.bookstore.dto.CustomerResponse;
+import com.ariel.bookstore.dto.CustomerUpdateRequest;
 import com.ariel.bookstore.model.Customer;
 import com.ariel.bookstore.service.CustomerService;
 import jakarta.validation.Valid;
-import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,59 +20,33 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/customers")
+@RequiredArgsConstructor
 public class CustomerController {
 
     private final CustomerService service;
 
-    public CustomerController(CustomerService service) {
-        this.service = service;
-    }
-
     @PostMapping
-    public ResponseEntity<Customer> create(@Valid @RequestBody Customer payload) {
-        Customer saved = service.create(payload);
-        return ResponseEntity.created(URI.create("/api/customer/" + saved.getId()))
-                .body(saved);
+    public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CustomerCreateRequest request) {
+        CustomerResponse created = service.create(request);
+        return ResponseEntity.created(URI.create("/api/customers/" + created.id())).body(created);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Customer> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(service.getById(id));
-    }
-
-    @GetMapping("/by-email")
-    public ResponseEntity<Customer> getByEmail(@RequestParam String email) {
-        return ResponseEntity.ok(service.getByEmail(email));
+    public CustomerResponse getById(@PathVariable UUID id) {
+        return service.getById(id);
     }
 
     @GetMapping
-    public ResponseEntity<Page<Customer>> list(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "fullName,asc") String sort
+    public Page<CustomerResponse> list(
+            @PageableDefault(sort = "name", direction = Sort.Direction.ASC) Pageable pageable,
+            @RequestParam(required = false) String name
     ) {
-        String[] parts = sort.split(",");
-        Sort.Direction dir = (parts.length > 1 && parts[1].trim().equalsIgnoreCase("desc"))
-                ? Sort.Direction.DESC : Sort.Direction.ASC;
-
-        Pageable pageable = PageRequest.of(page, size, Sort.by(new Sort.Order(dir, parts[0].trim())));
-
-        return ResponseEntity.ok(service.list(pageable));
+        return service.list(pageable, name);
     }
 
-    @GetMapping("/search")
-    public ResponseEntity<Page<Customer>> searchByName(
-            @RequestParam String name,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
-    ) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(service.searchByName(name, pageable));
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<Customer> update(@PathVariable UUID id, @Valid @RequestBody Customer payload) {
-        return ResponseEntity.ok(service.update(id, payload));
+    @GetMapping("/{id}")
+    public CustomerResponse update(@PathVariable UUID id, @Valid @RequestBody CustomerUpdateRequest request) {
+        return service.update(id, request);
     }
 
     @DeleteMapping("/{id}")
@@ -77,9 +55,4 @@ public class CustomerController {
         return ResponseEntity.noContent().build();
     }
 
-    @DeleteMapping
-    public ResponseEntity<Void> deleteAll() {
-        service.deleteAll();
-        return ResponseEntity.noContent().build();
-    }
 }

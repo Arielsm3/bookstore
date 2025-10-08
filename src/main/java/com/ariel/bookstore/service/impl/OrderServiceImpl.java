@@ -9,6 +9,7 @@ import com.ariel.bookstore.repository.BookRepository;
 import com.ariel.bookstore.repository.CustomerRepository;
 import com.ariel.bookstore.repository.OrderRepository;
 import com.ariel.bookstore.service.OrderService;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,8 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.NoSuchElementException;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -31,53 +31,97 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public OrderResponse create(OrderCreateRequest request) {
-        var customer = customerRepository.findById(request.customerId())
+        Customer customer = customerRepository.findById(request.customerId())
                 .orElseThrow(() -> new NoSuchElementException("Customer not found"));
 
-        var order = new Order();
+        Order order = new Order();
         order.setCustomer(customer);
         order.setStatus(OrderStatus.NEW);
         order.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         order.setUpdatedAt(order.getCreatedAt());
 
-        var total = BigDecimal.ZERO;
+        if(order.getLines() == null) {
+            order.setLines(new ArrayList<>());
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        List<Book> updatedBooks = new ArrayList<>();
+
         for(OrderLineRequest lineRequest: request.lines()) {
-            var book = bookRepository.findById(lineRequest.bookId())
+            Book book = bookRepository.findById(lineRequest.bookId())
                     .orElseThrow(() -> new NoSuchElementException("Book not found: " + lineRequest.bookId()));
 
-            var line = new OrderLine();
+            int quantity = lineRequest.quantity();
+            if(quantity <= 0) throw new IllegalArgumentException("Minimum quantity required is 1.");
+
+            int stock = Optional.ofNullable(book.getStock()).orElse(0);
+            if(stock < quantity) throw new IllegalArgumentException("Not enough available in stock.");
+
+            book.setStock(stock - quantity);
+            updatedBooks.add(book);
+
+            OrderLine line = new OrderLine();
             line.setOrder(order);
             line.setBook(book);
-            line.setQuantity(lineRequest.quantity());
+            line.setQuantity(quantity);
             line.setUnitPrice(book.getPrice());
 
-            var lineTotal = book.getPrice().multiply(BigDecimal.valueOf(lineRequest.quantity()));
+            BigDecimal lineTotal = book.getPrice().multiply(BigDecimal.valueOf(quantity));
             line.setLineTotal(lineTotal);
+
             order.getLines().add(line);
             total = total.add(lineTotal);
         }
 
         order.setTotal(total);
 
-        var saved = orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        bookRepository.saveAll(updatedBooks);
+
         return toResponse(saved);
     }
 
-    @Transactional(readOnly = true)
     @Override
+    @Transactional(readOnly = true)
     public OrderResponse getById(UUID id) {
         return orderRepository.findById(id)
                 .map(this::toResponse)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
     }
 
-    @Transactional(readOnly = true)
     @Override
-    public Page<OrderResponse> list(Pageable pageable) {
-        return orderRepository.findAll(pageable).map(this::toResponse);
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> list(Pageable pageable, UUID customerId, String status) {
+        OrderStatus orderStatus = null;
+        if(status != null && !status.isBlank()) {
+            try {
+                orderStatus = OrderStatus.valueOf(status.trim().toUpperCase());
+            }
+            catch(IllegalArgumentException ex) {
+                throw new IllegalArgumentException("Invalid status: " + status);
+            }
+        }
+
+        Page<Order> page;
+
+        if(customerId != null && orderStatus != null) {
+            page = orderRepository.findByCustomerIdStatus(customerId, orderStatus, pageable);
+        }
+        else if(customerId != null) {
+            page = orderRepository.findByCustomerId(customerId, pageable);
+        }
+        else if(orderStatus != null) {
+            page = orderRepository.findByStatus(orderStatus, pageable);
+        }
+        else { // if customerId == null && orderStatus == null
+            page = orderRepository.findAll(pageable);
+        }
+
+        return page.map(this::toResponse);
     }
 
     @Override
+    @Transactional
     public OrderResponse markPaid(UUID id) {
         var order = orderRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
@@ -87,23 +131,25 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional
     public OrderResponse cancel(UUID id) {
         var order = orderRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
+
         order.setStatus(OrderStatus.CANCELLED);
         order.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         return toResponse(orderRepository.save(order));
     }
 
     private OrderResponse toResponse(Order order) {
-        var lines = order.getLines().stream()
-                .map(orderLine -> new OrderLineResponse(
-                        orderLine.getId(),
-                        orderLine.getBook().getId(),
-                        orderLine.getBook().getTitle(),
-                        orderLine.getQuantity(),
-                        orderLine.getUnitPrice(),
-                        orderLine.getLineTotal()
+        List<OrderLineResponse> lines = order.getLines().stream()
+                .map(line -> new OrderLineResponse(
+                        line.getId(),
+                        line.getBook().getId(),
+                        line.getBook().getTitle(),
+                        line.getQuantity(),
+                        line.getUnitPrice(),
+                        line.getLineTotal()
                 ))
                 .toList();
 
